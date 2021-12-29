@@ -1,0 +1,367 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename ilist.info
+@settitle IList
+@c %**end of header
+@copying
+Display a list in an Ibuffer way.
+
+Copyright @copyright{} 2021  Durand
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled ``GNU
+Free Documentation License''.
+
+A copy of the license is also available from the Free Software
+Foundation Web site at @url{https://www.gnu.org/licenses/fdl.html}.
+
+@end quotation
+
+The document was typeset with
+@uref{https://www.gnu.org/software/texinfo/, GNU Texinfo}.
+
+@end copying
+
+@titlepage
+@title IList
+@subtitle Display a list in an Ibuffer way.
+@author Durand <mmemmew@@gmail.com>
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c Output the table of the contents at the beginning.
+@contents
+
+@ifnottex
+@node Top, About, (dir), (dir)
+@top IList
+
+@insertcopying
+@end ifnottex
+
+@c Generate the nodes for this menu with `C-c C-u C-m'.
+@menu
+* About::
+* Entry point::
+* Mapping over lines::
+* Moving::
+* Copying This Manual::
+* Index::
+@end menu
+
+@syncodeindex fn cp
+@syncodeindex vr cp
+
+@c Update all node entries with `C-c C-u C-n'.
+@c Insert new nodes with `C-c C-c n'.
+@node About, Entry point, Top, Top
+@chapter About
+
+@cindex description
+@cindex functionality
+@cindex use
+
+This is a little library package that can @emph{display a list in an
+Ibuffer fashion}.  The core functionality it provides is a function
+that can accept a list, and produce a string showing the contents of
+the list according to the specifications of columns, groups, and
+sorters.
+
+@node Entry point, Mapping over lines, About, Top
+@comment  node-name,  next,  previous,  up
+@chapter Entry point
+
+@cindex entry point
+@findex ilist-string
+
+The one main function this package provides is @code{ilist-string}.
+It is called as follows.
+
+@cindex signature of ilist-string
+@cindex how to call
+
+@lisp
+(ilist-string LIST COLUMNS GROUPS
+    &optional DISCARD-EMPTY-P SORTER NO-TRAILING-SPACE)
+@end lisp
+
+@table@code
+@item LIST
+This denotes the list that the user wants to display.
+@item COLUMNS
+@itemx GROUPS
+See @ref{Columns} and @ref{Groups}.
+@item DISCARD-EMPTY-P
+This determines whether to display empty groups or not.
+@item SORTER
+@cindex sorting elements
+This is either nil, or a function with two arguments which returns
+non-nil if and only if the first argument should be sorted before the
+second argument.  This is used to sort the elements in the list,
+before grouping happens.  To sort groups, see @ref{Groups}.
+@item NO-TRAILING-SPACE
+If this is non-nil then there will be no trailing whitespaces in the
+resulting string.
+@end table
+
+@menu
+* Columns::
+* Groups::
+@end menu
+
+@node Columns, Groups, Entry point, Entry point
+@comment  node-name,  next,  previous,  up
+@section Columns
+
+@cindex columns of the display
+@cindex column, specification
+
+Like in Ibuffer, the user can specify columns to display.  Each column
+comprises the following specifications:
+
+@table@code
+@item NAME
+The name to display in the header.
+@item FUN
+A function that will be given the elements of the list (one at a time)
+that should return a string as the representation of that element in
+this column.
+@item MIN
+@itemx MAX
+The minimal (resp. maximal) width this column takes.
+@item ALIGN
+Either :left, :right, or :center.  How the contents of the column are
+aligned.
+@item ELIDE
+@cindex eliding string
+If the content of an element takes more space than the MAX, whether to
+substitute the last few characters of that content by a fixed
+@emph{eliding string}.  If this ELIDE is not a string, then it means
+not to elide, but to truncate the contents.
+@end table
+
+@node Groups,  , Columns, Entry point
+@comment  node-name,  next,  previous,  up
+@section Groups
+
+@cindex filter groups
+
+There are two types of filter groups: the fixed and the automatic
+filter groups.
+
+@menu
+* Fixed groups::
+* Automatic groups::
+* Define automatic filter groups::
+@end menu
+
+@node Fixed groups, Automatic groups, Groups, Groups
+@comment  node-name,  next,  previous,  up
+@subsection Fixed groups
+
+@cindex fixed filter groups
+
+Like in Ibuffer, we can group elements together in the display.  One
+difference with Ibuffer is that elements that are not in any group are
+ignored.  If one wants a "default" group, specify that explicitly.  The
+specifications of @code{GROUPS} are as follows.
+
+@cindex fixed filter groups, specification
+
+@table @code
+@item NAME
+The name of the group.  This will be enclosed in square brackets and
+displayed on a separate line.
+@item FUN
+A function with one argument.  If the function returns non-nil, then
+that element is considered to pertain to the group.
+@end table
+
+@cindex fixed filter groups, default group
+
+So a default group just uses a function that always returns @code{t},
+and is put at the end of the list @code{GROUPS}.
+
+Empty groups might or might not be displayed, depending on the value
+of @code{DISCARD-EMPTY-P}.
+
+@node Automatic groups, Define automatic filter groups, Fixed groups, Groups
+@comment  node-name,  next,  previous,  up
+@subsection Automatic groups
+
+@cindex automatic filter groups, mechanism
+
+An automatic filter group is a function that can give labels to
+elements in a list.  These labels will be used to group elements
+automatically: the elements with the same label will be grouped
+together, automagically.  Besides, an automatic filter group is also
+responsible for sorting group labels, and for giving a default label,
+if no labels are specified for some element.
+
+To be precise, an automatic filter group is a function with the
+signature: @code{(ELEMENT &optional TYPE)}.  The optional argument
+@code{TYPE} says what the caller wants from the function:
+
+@cindex automatic filter groups, types
+
+@table@code
+@item nil
+If it is omitted or nil, the function should just return the label for
+@code{ELEMENT}.
+@item default
+If it is the symbol @code{default}, the function should return a
+default label.
+@item sorter
+If it is the symbol @code{sorter}, the function should return a
+function with two arguments, @code{X} and @code{Y}.  This returned
+function should return a non-nil value if and only if group @code{X}
+should be placed earlier than group @code{Y}.
+@end table
+
+@cindex automatic filter groups, example call
+
+So, for example, the call @code{(FUN t 'default)} should produce the
+default label, @code{(FUN t 'sorter)} should return the function used
+to sort groups, and @code{(FUN ELEMENT)} should return the label for
+@code{ELEMENT}, where @code{FUN} is an automatic filter group.
+
+@node Define automatic filter groups,  , Automatic groups, Groups
+@comment  node-name,  next,  previous,  up
+@subsection Define automatic filter groups
+
+@cindex custom automatic filter groups
+@cindex define automatic filter groups
+@findex ilist-define-automatic-group
+@findex ilist-dag
+
+If one wants to define ones own automatic filter group, then the macro
+@code{ilist-define-automatic-group}, or the shorter alias
+@code{ilist-dag}, might come in handy.
+
+In case you wonder, this @emph{dag} has nothing to do with an
+@emph{directed acyclic graph}; it is just an abbreviation to save some
+typing.  The coincidence of the names is a misfortune.
+
+@cindex signature of ilist-define-automatic-group
+
+This macro is called as follows.
+
+@lisp
+(ilist-dag NAME DEFAULT SORTER &rest BODY)
+@end lisp
+
+@table @code
+@item NAME
+This is a string.  The resulting function defined by this macro will
+be named as @code{ilist-automatic-group-NAME}.
+@item DEFAULT
+This is also a string.  It is used to label elements for which this
+automatic group returns nil as its label.
+
+@cindex reason for using default in automatic groups
+
+Why not just let the automatic group function give the default label
+instead of nil, then?  Well, people make mistakes all the time, at
+least I do.  So I think this mechanism can help people to remember
+give a default label for elements.
+@item SORTER
+This can be a symbol, or an s-expression.
+
+If it is a symbol, it will be used as the sorting function of the
+group labels.  Note that one does not have to quote this symbol,
+though you can still quote it.
+
+@cindex ilist-dag sorter convention
+
+If it is an s-expression., it will be used to define a function
+@code{ilist-automatic-group-NAME-sorter}, which then becomes the
+sorting function.  The variables @code{X} and @code{Y} are bound to
+the labels to sort in this expression.  The sorter function should
+return a non-nil value if and only if the group labelled @code{X}
+should be displayed before the group labelled @code{Y}.
+@end table
+
+@node Mapping over lines, Moving, Entry point, Top
+@comment  node-name,  next,  previous,  up
+@chapter Mapping over lines
+
+@cindex mapping
+@cindex loop through display
+@findex ilist-map-lines
+
+For the convenience of package-users, this package also provides some
+auxiliary functions to operate on the displayed list.  One is
+@code{ilist-map-lines}.  Its return value is the list of execution
+results on the lines over which the function is executed.  By default
+it skips invisible lines, but this behaviour can be alterred.
+
+It is called as follows.
+
+@cindex signature of ilist-map-lines
+
+@lisp
+(ilist-map-lines FUN &optional PREDICATE START END NO-SKIP-INVISIBLE)
+@end lisp
+
+@table @code
+@item FUN
+The function to execute on each matching line.
+@item PREDICATE
+This should be a function with no arguments.  It will be executed on
+each line.  If it returns non-nil, that line is considered to be
+matched.
+@item START
+@itemx END
+They limit the range of the mapping.
+@item NO-SKIP-INVISIBLE
+If non-nil, then we don’t skip invisible lines.
+@end table
+
+@node Moving, Copying This Manual, Mapping over lines, Top
+@comment  node-name,  next,  previous,  up
+@chapter Moving
+
+@cindex moving around
+@cindex navigations
+@cindex round buffer
+
+It might be desired to move between the displayed list items in a
+@emph{cyclic} manner, that is, assuming the top of the buffer is
+identified with the bottom of the buffer.  So the package provides
+four functions for moving.  These functions all have an argument
+@code{NO-SKIP-INVISIBLE}; if that argument is non-nil, then invisible
+lines won't skipped.
+
+@findex ilist-forward-line
+@findex ilist-backward-line
+@findex ilist-forward-group-header
+@findex ilist-backward-group-header
+
+@table @code
+@item ilist-backward-line
+@itemx ilist-forward-line
+Move between lines.  One can control whether to skip group headers or
+to move cyclicly, through the function parameters.
+@item ilist-backward-group-header
+@itemx ilist-forward-group-header
+Move between group headers.
+@end table
+
+@node Copying This Manual, Index, Moving, Top
+@appendix Copying This Manual
+
+@c Get fdl.texi from https://www.gnu.org/licenses/fdl.html
+@include fdl-1.3.texi
+
+@node Index,  , Copying This Manual, Top
+@appendix Index
+
+@printindex cp
+
+@bye
