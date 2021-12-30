@@ -1,9 +1,10 @@
 ;;; ilist.el --- Display a list in an ibuffer way.   -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2021  Durand
+;; Copyright (C) 2021  Free Software Foundation, Inc.
 
 ;; Author: Durand <mmemmew@gmail.com>
-;; Keywords: convenience, maint
+;; Keywords: convenience
+;; Version: 0.1
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -101,22 +102,22 @@ but got %S" align)))
 
 ;;;; column accessors
 
-(defalias 'ilist-column-name 'car
+(defalias 'ilist-column-name #'car
   "Return the NAME of COLUMN.
 
 \(fn COLUMN)")
 
-(defalias 'ilist-column-fun 'cadr
+(defalias 'ilist-column-fun #'cadr
   "Return the FUN in COLUMN.
 
 \(fn COLUMN)")
 
-(defalias 'ilist-column-min 'caddr
+(defalias 'ilist-column-min #'caddr
   "Return the MIN in COLUMN.
 
 \(fn COLUMN)")
 
-(defalias 'ilist-column-max 'cadddr
+(defalias 'ilist-column-max #'cadddr
   "Return the MAX in COLUMN.
 
 \(fn COLUMN)")
@@ -751,56 +752,25 @@ Note that if DEFAULT is not a string, it will be evaluated and
 the result will be used.  If there are errors in the evaluation,
 it will simply be converted to a string silently."
   (declare (indent 3))
-  (let ((default (cond ((stringp default) default)
-                       ((ignore-errors (eval default)))
-                       ((format "%S" default))))
-        (fn (intern (format "ilist-automatic-group-%s" name)))
+  (let ((fn (intern (format "ilist-automatic-group-%s" name)))
         (sorter-symbol
          (cond
-          ((symbolp sorter) sorter)
-          ((and (or (eq (car sorter) 'function)
-                    (eq (car sorter) 'quote))
+          ((or (symbolp sorter) (functionp sorter)) sorter)
+          ((and (memq (car sorter) (list 'function 'quote))
                 (cadr sorter)))
-          ((intern
-            (format
-             "ilist-automatic-group-%s-sorter" name))))))
-    (cond
-     ((or (symbolp sorter)
-          (eq (car sorter) 'function)
-          (eq (car sorter) 'quote))
-      (list
-       'defun fn (list 'element (quote &optional) 'type)
-       "A filter group defined by `ilist-define-automatic-group'.
+          ((error
+            "SORTER should be a function, but got %S" sorter)))))
+    (list
+     'defun fn (list 'element (quote &optional) 'type)
+     "A filter group defined by `ilist-define-automatic-group'.
 This should be used by `ilist-string' as an automatic filter group."
-       (list
-        'cond
-        (list (list 'eq 'type ''default)
-              default)
-        (list (list 'eq 'type ''sorter)
-              (list 'function sorter-symbol))
-        (cons t body))))
-     ((list
-       'progn
-       (list
-        'defun sorter-symbol (list 'x 'y)
-        (format
-         "A filter group sorter defined by \
-`ilist-define-automatic-group'.
-
-This should be used by `%s' as its sorter."
-         fn)
-        sorter)
-       (list
-        'defun fn (list 'element (quote &optional) 'type)
-        "A filter group defined by `ilist-define-automatic-group'.
-This should be used by `ilist-string' as an automatic filter group."
-        (list
-         'cond
-         (list (list 'eq 'type ''default)
-               default)
-         (list (list 'eq 'type ''sorter)
-               (list 'function sorter-symbol))
-         (cons t body))))))))
+     (list
+      'cond
+      (list (list 'eq 'type ''default)
+            default)
+      (list (list 'eq 'type ''sorter)
+            (list 'function sorter-symbol))
+      (cons t body)))))
 
 ;; for saving some key-strokes
 (defalias 'ilist-dag #'ilist-define-automatic-group)
@@ -856,56 +826,6 @@ lines."
         (ilist-forward-line 1 nil nil no-skip-invisible))
       (nreverse res))))
 
-;;; Whether a text property is deemed invisible
-
-(defun ilist-belong-to-spec (symbol spec)
-  "An auxiliary function for `ilist-invisible-property-p'.
-Return t if SYMBOL is a symbol and SPEC is a list, and if either
-SYMBOL is an element of SPEC, or SYMBOL is the `car' of an
-element of SPEC.
-
-Return nil otherwise."
-  (declare (pure t) (side-effect-free error-free))
-  (cond
-   ((and (symbolp symbol)
-         (listp spec)
-         spec
-         (or (memq symbol spec)
-             (assq symbol spec)))
-    t)))
-
-(defun ilist-invisible-property-p (property spec)
-  "Whether PROPERTY is determined as invisible by SPEC.
-According to the documentation of `buffer-invisibility-spec',
-this returns t if and only if one of the following conditions
-holds:
-
-- If PROPERTY is non-nil and SPEC is t.
-- If SPEC is a list, and if one of the following holds:
-  - PROPERTY is a symbol, which is an element of SPEC
-  - PROPERTY is a symbol, which is the `car' of an element of SPEC.
-  - PROPERTY is a list, which contains a symbol that is an
-    element of SPEC.
-  - PROPERTY is a list, which contains a symbol that is the `car'
-    of an element of SPEC."
-  (declare (pure t) (side-effect-free error-free))
-  (cond
-   ((eq spec t) property)
-   ;; nil is considered a list, so we separate this case out
-   ((null spec) nil)
-   ((listp spec)
-    (cond
-     ((symbolp property) (ilist-belong-to-spec property spec))
-     ((listp property)
-      ;; `or' is a special form, not a function, so we cannot `apply'
-      ;; it.  So we use this trick.
-      (eval
-       (cons
-        (intern "or")
-        (mapcar
-         (lambda (symbol) (ilist-belong-to-spec symbol spec))
-         property))))))))
-
 ;;; Point at the end of line
 
 (defun ilist-point-at-eol (&optional pos no-skip-invisible)
@@ -920,9 +840,7 @@ well."
      (t
       (while (progn
                (skip-chars-forward "^\n")
-               (ilist-invisible-property-p
-                (get-text-property (point) 'invisible)
-                buffer-invisibility-spec))
+               (invisible-p (point)))
         (goto-char
          (next-single-char-property-change
           (point) 'invisible)))
@@ -973,12 +891,11 @@ well."
 (defun ilist-hidden-group-p ()
   "Return t if the group at point is hidden."
   (declare (side-effect-free t))
-  (ilist-invisible-property-p
+  (invisible-p
    (intern
     (format
      "[ %s ]"
-     (ilist-get-property (point) 'ilist-group-header)))
-   buffer-invisibility-spec))
+     (ilist-get-property (point) 'ilist-group-header)))))
 
 ;;; marks related
 
@@ -1190,9 +1107,7 @@ skipped."
   (while (and skip-groups
               (or
                (and (not no-skip-invisible)
-                    (ilist-invisible-property-p
-                     (ilist-get-property (point) 'invisible t)
-                     buffer-invisibility-spec))
+                    (invisible-p (point)))
                (let ((fake-properties properties)
                      res)
                  (while (and (not res)
@@ -1234,9 +1149,7 @@ skipped."
      ((and forwardp
            (not skip-groups)
            (ilist-boundary-buffer-p nil)
-           (ilist-invisible-property-p
-            (ilist-get-property (point) 'invisible t)
-            buffer-invisibility-spec))
+           (invisible-p (point)))
       (setq arg (1+ arg))))
     (ilist-skip-properties t forwardp
                            '(ilist-header ilist-title-sep) t)
@@ -1245,9 +1158,7 @@ skipped."
     (cond ((and
             (/= original-point (point))
             (not
-             (ilist-invisible-property-p
-              (ilist-get-property (point) 'invisible t)
-              buffer-invisibility-spec))
+             (invisible-p (point)))
             (or (null skip-groups)
                 (not (ilist-get-group t))))
            (setq arg (1- arg))))
@@ -1255,9 +1166,7 @@ skipped."
     ;; if point is invisible right now, first skip out of it.
     (while (and (not no-skip-invisible)
                 (not (ilist-boundary-buffer-p forwardp))
-                (ilist-invisible-property-p
-                 (ilist-get-property (point) 'invisible t)
-                 buffer-invisibility-spec))
+                (invisible-p (point)))
       (forward-line (cond (forwardp 1) (-1))))
     ;; if we are moving backwards, subtract an arg if necessary
     (cond
@@ -1269,9 +1178,7 @@ skipped."
       ;; skip invisible lines if needed
       (while (and (not no-skip-invisible)
                   (not (ilist-boundary-buffer-p forwardp))
-                  (ilist-invisible-property-p
-                   (ilist-get-property (point) 'invisible t)
-                   buffer-invisibility-spec))
+                  (invisible-p (point)))
         (forward-line (cond (forwardp 1) (-1))))
       ;; skip the group and the boundary twice to ensure that we avoid
       ;; the edges as much as possible.
@@ -1324,27 +1231,21 @@ well."
     (cond
      ((and forwardp
            (ilist-boundary-buffer-p nil)
-           (ilist-invisible-property-p
-            (ilist-get-property (point) 'invisible t)
-            buffer-invisibility-spec))
+           (invisible-p (point)))
       (setq arg (1+ arg))))
     (ilist-skip-properties
      t forwardp '(ilist-header ilist-title-sep) t)
     (cond ((and
             (/= original-point (point))
             (not
-             (ilist-invisible-property-p
-              (ilist-get-property (point) 'invisible t)
-              buffer-invisibility-spec))
+             (invisible-p (point)))
             (ilist-get-group t))
            (setq arg (1- arg))))
     (setq original-point (point))
     ;; if point is invisible right now, first skip out of it.
     (while (and (not no-skip-invisible)
                 (not (ilist-boundary-buffer-p forwardp))
-                (ilist-invisible-property-p
-                 (ilist-get-property (point) 'invisible t)
-                 buffer-invisibility-spec))
+                (invisible-p (point)))
       (forward-line (cond (forwardp 1) (-1))))
     ;; if we are moving backwards, subtract an arg if necessary
     (cond
@@ -1356,9 +1257,7 @@ well."
       ;; skip invisible lines if needed
       (while (and (not no-skip-invisible)
                   (not (ilist-boundary-buffer-p forwardp))
-                  (ilist-invisible-property-p
-                   (ilist-get-property (point) 'invisible t)
-                   buffer-invisibility-spec))
+                  (invisible-p (point)))
         (forward-line (cond (forwardp 1) (-1))))
       ;; skip the group and the boundary twice to ensure that we avoid
       ;; the edges as much as possible.

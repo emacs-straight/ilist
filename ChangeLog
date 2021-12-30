@@ -1,3 +1,14 @@
+2021-12-29  Stefan Monnier <monnier@iro.umontreal.ca>
+
+	Use the built-in function invisible-p to replace a hand-made
+	function ilist-invisible-property-p.
+
+	Correct the use of an argument to the macro
+	ilist-define-automatic-group.
+
+	Provide a better way to handle the definition of sorters in the
+	macro ilist-define-automatic-group.
+
 2021-12-28  李俊緯  <mmemmew@gmail.com>
 
 	Update documentation.

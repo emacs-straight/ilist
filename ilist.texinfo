@@ -53,6 +53,22 @@ The document was typeset with
 * Moving::
 * Copying This Manual::
 * Index::
+
+@detailmenu
+ --- The Detailed Node Listing ---
+
+Entry point
+
+* Columns::
+* Groups::
+
+Groups
+
+* Fixed groups::
+* Automatic groups::
+* Define automatic filter groups::
+
+@end detailmenu
 @end menu
 
 @syncodeindex fn cp
