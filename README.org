@@ -119,18 +119,13 @@ This macro is called as follows.
   instead of nil, then?  Well, people make mistakes all the time, at
   least I do.  So I think this mechanism can help people to remember
   give a default label for elements. 
-- SORTER: This can be a symbol, or an s-expression.
+- SORTER: This should be a function, or the symbol of a function.
 
-  If it is a symbol, it will be used as the sorting function of the
-  group labels.  Note that one does not have to quote this symbol,
-  though you can still quote it.
-
-  If it is an s-expression., it will be used to define a function
-  =ilist-automatic-group-NAME-sorter=, which then becomes the sorting
-  function.  The variables =X= and =Y= are bound to the labels to sort
-  in this expression.  The sorter function should return a non-nil
-  value if and only if the group labelled =X= should be displayed
-  before the group labelled =Y=.
+  This will be used as the sorting function of the group labels.  The
+  sorter function should accept two arguments, and should return a
+  non-nil value if and only if the group labelled by the first
+  argument should be displayed before the group labelled by the second
+  argument.
 
 * Mapping over lines
 
