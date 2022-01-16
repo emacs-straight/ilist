@@ -51,24 +51,9 @@ The document was typeset with
 * Entry point::
 * Mapping over lines::
 * Moving::
+* Packages using IList::
 * Copying This Manual::
 * Index::
-
-@detailmenu
- --- The Detailed Node Listing ---
-
-Entry point
-
-* Columns::
-* Groups::
-
-Groups
-
-* Fixed groups::
-* Automatic groups::
-* Define automatic filter groups::
-
-@end detailmenu
 @end menu
 
 @syncodeindex fn cp
@@ -333,7 +318,7 @@ They limit the range of the mapping.
 If non-nil, then we don’t skip invisible lines.
 @end table
 
-@node Moving, Copying This Manual, Mapping over lines, Top
+@node Moving, Packages using IList, Mapping over lines, Top
 @comment  node-name,  next,  previous,  up
 @chapter Moving
 
@@ -363,7 +348,22 @@ to move cyclicly, through the function parameters.
 Move between group headers.
 @end table
 
-@node Copying This Manual, Index, Moving, Top
+@node Packages using IList, Copying This Manual, Moving, Top
+@comment  node-name,  next,  previous,  up
+@chapter Packages using IList
+
+The packages that use this library IList, which I know of, are listed
+here:
+
+@cindex blist
+- BList (https://www.gitlab.com/mmemmew/blist)
+
+@cindex suggestion
+If you know about other packages that use IList, or if you write a
+package using IList, it is welcomed to suggest to list those packages
+here.
+
+@node Copying This Manual, Index, Packages using IList, Top
 @appendix Copying This Manual
 
 @c Get fdl.texi from https://www.gnu.org/licenses/fdl.html

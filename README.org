@@ -158,3 +158,14 @@ if that argument is non-nil, then invisible lines won't skipped.
   parameters.
 - =ilist-backward-group-header=
 - =ilist-forward-group-header=: Move between group headers.
+
+* Packages using IList
+
+The packages that use this library IList, which I know of, are listed
+here:
+
+- [[BList][https://www.gitlab.com/mmemmew/blist]]
+
+If you know about other packages that use IList, or if you write a
+package using IList, it is welcomed to suggest to list those packages
+here.
