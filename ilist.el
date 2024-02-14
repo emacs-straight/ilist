@@ -4,7 +4,8 @@
 
 ;; Author: Durand <mmemmew@gmail.com>
 ;; Keywords: convenience
-;; Version: 0.1
+;; URL: https://gitlab.com/mmemmew/ilist
+;; Version: 0.2
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -131,31 +132,86 @@ but got %S" align)))
   "Return the ELIDE in COLUMN."
   (nth 5 column))
 
-;;; Calculate the length of a string correctly (obsolete)
+;;; Whether to operate at the pixel-level precisions
 
-;; NOTE: This is obsolete now and should not be used, in case this is
-;; not clear enough.
+(defvar ilist-pixel-precision nil
+  "If non-nil, the string truncation and length related operations
+will perform pixel-level calculations.  If nil, they will use
+`truncate-string-to-width' and `string-width' as approximations.
 
-(defun ilist-length (str)
-  "Return the length of STR.
-Characters that take up more than one column will be counted with
-1.7 columns."
-  (declare (side-effect-free t) (pure t)
-           (obsolete string-width "2021-12-19 23:53:42.283857"))
-  (let ((len 0))
-    (mapc (lambda (char)
-            (let ((name (get-char-code-property char 'name))
-                  (decomposition (get-char-code-property char 'decomposition)))
-              (cond
-               ((or (and
-                     (stringp name)
-                     (string-match (rx-to-string '(seq bos "CJK"))
-                                   name))
-                    (eq (car decomposition) 'wide))
-                (setq len (+ len 1.7)))
-               ((setq len (1+ len))))))
-          str)
-    (floor len)))
+Pixel-level calculations are more accurate but more expensive, so
+users should intentionally decide to enable this feature, in
+order not to hang Emacs unexpectedly.")
+
+;;; Calculate the length of a string correctly
+
+;; NOTE: This used to be obsolete, but is now given a new life.
+
+(defun ilist-string-width (str)
+  "Return the width of STR.
+If the variable `ilist-pixel-precision' is non-nil, use
+`string-pixel-width'; otherwise use `string-width'."
+  ;; (declare (side-effect-free t) (pure t)
+  ;;          (obsolete string-width "2021-12-19 23:53:42.283857"))
+  (cond (ilist-pixel-precision (string-pixel-width str))
+        ((string-width str))))
+
+(defun ilist-fake-round (arg &optional divisor)
+  "Either use round or just return ARG, depending on if
+`ilist-pixel-precision' is non-nil."
+  (cond (ilist-pixel-precision (cond (divisor (round arg divisor))
+                                     ((round arg))))
+        (arg)))
+
+;;; Correctly truncate strings
+
+(defun ilist-truncate (str limit &optional ellipsis)
+  "Truncate the string STR to no longer than LIMIT columns.
+ELLIPSIS has the same meaning as for `truncate-string-to-width'.
+
+This function calculates widths by `string-pixel-width'."
+  (cond
+   (ilist-pixel-precision
+    (setq ellipsis
+          (cond ((or (null ellipsis) (stringp ellipsis)) ellipsis)
+                ((truncate-string-ellipsis))))
+    (let* ((substring-list (string-glyph-split str))
+           (str-len (length str))
+           (str-pixels (string-pixel-width str))
+           (ellipsis-pixels
+            (cond (ellipsis (string-pixel-width ellipsis)) (0)))
+           (column 0)
+           (idx 0)
+           (space-width (string-pixel-width (string #x20)))
+           (limit (* space-width limit))
+           last-column last-idx)
+      (with-current-buffer (get-buffer-create
+                            " *ilist-truncate-to-pixels*")
+        (when (bound-and-true-p display-line-numbers-mode)
+          (display-line-numbers-mode -1))
+        (delete-region (point-min) (point-max))
+        (setq line-prefix nil)
+        (setq wrap-prefix nil)
+        (cond ((and (< limit str-pixels)
+                    (< ellipsis-pixels str-pixels))
+               (setq limit (- limit ellipsis-pixels)))
+              ((setq ellipsis (string))))
+        (condition-case nil
+            (while (< column limit)
+              (setq last-column column)
+              (setq last-idx idx)
+              (insert (propertize
+                       (nth idx substring-list)
+                       'line-prefix nil 'wrap-prefix nil))
+              (setq column (car (buffer-text-pixel-size nil nil t)))
+              (setq idx (1+ idx)))
+          (args-out-of-range (setq idx str-len)))
+        (cond
+         ((> column limit)
+          (setq column last-column)
+          (setq idx last-idx)))
+        (concat (substring str 0 idx) ellipsis))))
+   ((truncate-string-to-width str limit 0 nil ellipsis))))
 
 ;;; display a row
 
@@ -178,6 +234,7 @@ trailing spaces."
   (let ((column-len (length columns))
         (column-mins (mapcar #'ilist-column-min columns))
         (column-aligns (mapcar #'ilist-column-align columns))
+        (space-width (ilist-string-width (string #x20)))
         result column-widths)
     ;; result will be a list each of whose elements corresponds to an
     ;; element in LS.  Each element corresponds to a list, each of
@@ -187,7 +244,16 @@ trailing spaces."
     ;; truncated.  So result is of the form
     ;;
     ;; (((LEN11 . STR11) (LEN12 . STR12) ...)
-    ;;  ((LEN21 . STR21) (LEN22 . STR22) ...))
+    ;;  ((LEN21 . STR21) (LEN22 . STR22) ...)
+    ;;  ...)
+    ;;
+    ;; NOTE: I was using the function `string-width' to measure the
+    ;; widths of strings, but as it turns out, this function is only
+    ;; an approximation of the real width for non-Latin letters, as is
+    ;; correctly pointed out by the documentation string.  As a
+    ;; consequence I now turn to the function `string-pixel-width' to
+    ;; correctly measure the widths, but this function measures in
+    ;; pixels, so I need to deal with alignment using "hacky hacks".
     (setq
      result
      (mapcar
@@ -208,12 +274,11 @@ trailing spaces."
                           (> str-len max-len))
                      (cond
                       ((stringp elide)
-                       (truncate-string-to-width
-                        str max-len 0 nil elide))
-                      ((truncate-string-to-width str max-len))))
+                       (ilist-truncate str max-len elide))
+                      ((ilist-truncate str max-len))))
                     (str))
                    ))
-             (cons (string-width str) str)))
+             (cons (ilist-string-width str) str)))
          columns))
       ls))
     ;; The list column-widths has a special convention: if a width is
@@ -239,8 +304,8 @@ trailing spaces."
      (mapcar
       (lambda (element)
         ;; we loop from the end of the columns, so that we can keep
-        ;; pushing elements to the front, without having to reverse the
-        ;; list afterwards.
+        ;; pushing elements to the front, without having to reverse
+        ;; the list afterwards.
         (let ((index (1- column-len))
               temp temp-width temp-align row)
           (while (>= index 0)
@@ -250,10 +315,12 @@ trailing spaces."
             ;; min-width.
             (cond
              ((< (abs (nth index column-widths))
-                 (nth index column-mins))
-              (setq temp-width (nth index column-mins))
+                 (* space-width (nth index column-mins)))
+              (setq temp-width
+                    (* space-width (nth index column-mins)))
               (setcar (nthcdr index column-widths)
                       (* temp-width
+                         ;; plus or minus
                          (floor (nth index column-widths)
                                 (abs (nth index column-widths))))))
              ((setq temp-width (abs (nth index column-widths)))))
@@ -267,8 +334,9 @@ trailing spaces."
                  ((>= (nth index column-widths) 0)
                   (concat (cdr temp)
                           (make-string
-                           (- temp-width
-                              (car temp))
+                           (ilist-fake-round
+                            (- temp-width (car temp))
+                            space-width)
                            #x20)))
                  ((cdr temp)))
                 row)))
@@ -277,24 +345,29 @@ trailing spaces."
                row
                (cons
                 (concat (make-string
-                         (- temp-width
-                            (car temp))
+                         (ilist-fake-round
+                          (- temp-width (car temp))
+                          space-width)
                          #x20)
                         (cdr temp))
                 row)))
              ((setq
                row
                (cons
-                (let ((pad-left-len (floor (- temp-width
-                                              (car temp))
-                                           2)))
+                (let ((pad-left-len
+                       (floor (- temp-width (car temp))
+                              2)))
                   (concat
-                   (make-string pad-left-len #x20)
+                   (make-string
+                    (ilist-fake-round pad-left-len space-width)
+                    #x20)
                    (cdr temp)
                    (cond
                     ((>= (nth index column-widths) 0)
-                     (make-string (- temp-width pad-left-len
-                                     (car temp))
+                     (make-string (ilist-fake-round
+                                   (- temp-width pad-left-len
+                                      (car temp))
+                                   space-width)
                                   #x20))
                     (""))))
                 row))))
@@ -459,6 +532,7 @@ matched data, the cursor position, etc."
               "GROUPS should be either a list or a function, "
               "but got %S")
              (type-of groups)))))
+         (space-width (ilist-string-width (string #x20)))
          column-widths temp-group group-results group-strs
          all-cols all-cols-indices header title-sep)
     ;; If we want to operate on the displayed list, then we should
@@ -610,7 +684,7 @@ matched data, the cursor position, etc."
           (let* ((width (nth index column-widths))
                  (alignment (ilist-column-align col))
                  (name (ilist-column-name col))
-                 (complement (- width (string-width name)))
+                 (complement (- width (ilist-string-width name)))
                  (floor-len (floor complement 2)))
             ;; we increase the index before the end of the form
             (setq index (1+ index))
@@ -620,19 +694,28 @@ matched data, the cursor position, etc."
                ((< index column-len)
                 (concat
                  name
-                 (make-string complement #x20)))
+                 (make-string
+                  (ilist-fake-round complement space-width)
+                  #x20)))
                (name)))
              ((eq alignment :right)
               (concat
-               (make-string complement #x20)
+               (make-string
+                (ilist-fake-round complement space-width)
+                #x20)
                name))
              ;; :center
              ((concat
-               (make-string floor-len #x20)
+               (make-string
+                (ilist-fake-round floor-len space-width)
+                #x20)
                name
                (cond
                 ((< index column-len)
-                 (make-string (- complement floor-len) #x20))
+                 (make-string
+                  (ilist-fake-round
+                   (- complement floor-len) space-width)
+                  #x20))
                 ("")))))))
         columns
         (string #x20)))
@@ -646,8 +729,10 @@ matched data, the cursor position, etc."
           (let* ((width (nth index column-widths))
                  (alignment (ilist-column-align col))
                  (name (ilist-column-name col))
-                 (name-len (string-width name))
-                 (name-sep (make-string name-len ?-))
+                 (name-len (ilist-string-width name))
+                 (name-sep (make-string
+                            (ilist-fake-round name-len space-width)
+                            ?-))
                  (complement (- width name-len))
                  (floor-len (floor complement 2)))
             (setq index (1+ index))
@@ -657,18 +742,27 @@ matched data, the cursor position, etc."
                ((< index column-len)
                 (concat
                  name-sep
-                 (make-string complement #x20)))
+                 (make-string
+                  (ilist-fake-round complement space-width)
+                  #x20)))
                (name-sep)))
              ((eq alignment :right)
               (concat
-               (make-string complement #x20)
+               (make-string
+                (ilist-fake-round complement space-width)
+                #x20)
                name-sep))
              ((concat
-               (make-string floor-len #x20)
+               (make-string
+                (ilist-fake-round floor-len space-width)
+                #x20)
                name-sep
                (cond
                 ((< index column-len)
-                 (make-string (- complement floor-len) #x20))
+                 (make-string
+                  (ilist-fake-round
+                   (- complement floor-len) space-width)
+                  #x20))
                 ("")))))))
         columns
         (string #x20))))
